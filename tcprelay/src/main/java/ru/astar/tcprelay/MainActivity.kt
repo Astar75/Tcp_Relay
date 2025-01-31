@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -43,6 +44,10 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 class MainActivity : ComponentActivity() {
+
+    private val preferences by lazy {
+        getSharedPreferences("tcprelay_settings", Context.MODE_PRIVATE)
+    }
 
     private var permissionResult: (Boolean) -> Unit = {}
     private val permissionLauncher = registerForActivityResult(
@@ -81,11 +86,17 @@ class MainActivity : ComponentActivity() {
                     }
 
                     if (notificationPermissionGranted) {
+                        val params = readParams()
+
                         MainScreen(
                             modifier = Modifier.padding(innerPadding),
+                            inputPortInit = params[0].toIntOrNull() ?: 0,
+                            targetPortInit = params[1].toIntOrNull() ?: 0,
+                            ipAddressInit = params[2],
                             connected = connected,
                             viewModel = viewModel,
                             onClickConnect = { inputPort, targetPort, ipAddress ->
+                                saveParams(inputPort, targetPort, ipAddress)
                                 if (!connected.value) {
                                     val intent =
                                         Intent(this@MainActivity, TcpService::class.java).apply {
@@ -112,6 +123,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun saveParams(inputPort: Int, targetPort: Int, ipAddress: String) {
+        preferences.edit()
+            .putInt("input_port", inputPort)
+            .putInt("target_port", targetPort)
+            .putString("target_ip", ipAddress)
+            .apply()
+    }
+
+    private fun readParams(): Array<String> {
+        val array = Array(3) { "" }
+        array[0] = preferences.getInt("input_port", 0).toString()
+        array[1] = preferences.getInt("target_port", 0).toString()
+        array[2] = preferences.getString("target_ip", "") ?: ""
+        return array
     }
 
     private suspend fun checkNotificationPermission(): Boolean {
@@ -152,10 +179,13 @@ fun MainScreen(
     connected: State<Boolean>,
     onClickConnect: ((Int, Int, String) -> Unit)? = null,
     viewModel: MainViewModel,
+    inputPortInit: Int,
+    targetPortInit: Int,
+    ipAddressInit: String,
 ) {
-    var inputPort by remember { mutableIntStateOf(0) }
-    var targetPort by remember { mutableIntStateOf(0) }
-    var ipAddress by remember { mutableStateOf("0.0.0.0") }
+    var inputPort by remember { mutableIntStateOf(inputPortInit) }
+    var targetPort by remember { mutableIntStateOf(targetPortInit) }
+    var ipAddress by remember { mutableStateOf(ipAddressInit) }
 
     val logs by viewModel.logsFlow.collectAsState()
 
